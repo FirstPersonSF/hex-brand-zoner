@@ -133,8 +133,7 @@ Formatting:
                         "format": {
                             "type": "json_schema",
                             "schema": self.MACHINE_JSON_SCHEMA
-                        },
-                        "require_json": False
+                        }
                     },
                     temperature=self.config.temperature
                 )
