@@ -33,6 +33,155 @@ def _extract_summary(markdown: str) -> Dict[str, Any]:
     return {}
 
 
+# Zone overview definitions (inserted verbatim into reports)
+ZONE_DEFINITIONS = {
+    "1": """## Zone 1: Fully Masterbranded
+
+### Overview
+
+Zone 1 represents complete alignment with Hexagon.
+Offerings carry no separate logo, colour, or name identity, they are wholly Hexagon.
+
+Zone 1 applies to brands, products, and services that are fully absorbed into the Hexagon masterbrand. These entities no longer carry a separate identity and are represented exclusively using the Hexagon visual system.
+
+This is the most integrated form of brand alignment and the default destination for many newly launched or fully transitioned offerings.
+
+### Visual Identity Principles
+
+- Use only the Hexagon logo.
+- Follow Hexagon typography, colour palette, and layout.
+- Use descriptive names (e.g., "Hexagon Atlas")
+""",
+    "3A": """## Zone 3A: Endorsed by Hexagon (Business Unit Lockups)
+
+### Overview
+
+Zone 3A applies to legacy or business unit brands endorsed by Hexagon.
+The endorsed logo remains but is redrawn in Hexagon Sky Dark Blue and paired in a formal lockup.
+
+### Visual Identity Principles
+
+- Approved lockup: Hexagon logo above or beside endorsed logo with divider.
+- Endorsed logo scaled to 70% of Hexagon size.
+- Original colours retired.
+""",
+    "3B": """## Zone 3B: Sub-brands
+
+### Overview
+
+Zone 3B applies to internal or external initiatives, platforms, and programs that require a distinctive name but not a standalone logo.
+
+### Principles
+
+- Sub-brand names appear in text only.
+- Always accompanied by the Hexagon logo.
+- Use Hexagon typography and colour palette.
+""",
+    "3C": """## Zone 3C: Integrated Products and Solutions
+
+### Overview
+
+Zone 3C covers products, services, and solutions fully integrated within Hexagon.
+They use unified naming and badge systems, never independent logos.
+
+### Badge System
+
+- Marketing Badge: For campaigns and web.
+- Application Badge: For software UI or icons.
+- Colours follow Hexagon's Land, Sea, Sky families.
+
+### Attribution Levels
+
+1. Portfolio/Platform: Text only.
+2. Suite/Solution: Text only.
+3. Product: Badge assigned.
+4. Embedded: Hexagon logo only.
+""",
+    "4": """## Zones 4 & 5: Independent and Transitional Brands
+
+### Overview
+
+Zones 4 and 5 cover brands operating outside Hexagon's visual system due to strategic, legal, or market reasons.
+
+### Zone 4 – Independent Brands
+
+- Remain visually separate.
+- Use their own logos and colours.
+- Carry no Hexagon attribution.
+
+### Zone 5 – Transitional Brands
+
+- Newly acquired or incubating brands.
+- Retain their identity temporarily.
+- Evaluated for migration to Zones 1–3.
+""",
+    "5": """## Zones 4 & 5: Independent and Transitional Brands
+
+### Overview
+
+Zones 4 and 5 cover brands operating outside Hexagon's visual system due to strategic, legal, or market reasons.
+
+### Zone 4 – Independent Brands
+
+- Remain visually separate.
+- Use their own logos and colours.
+- Carry no Hexagon attribution.
+
+### Zone 5 – Transitional Brands
+
+- Newly acquired or incubating brands.
+- Retain their identity temporarily.
+- Evaluated for migration to Zones 1–3.
+"""
+}
+
+
+def _inject_zone_overview(markdown: str, zone: str, subzone: str = "") -> str:
+    """Inject zone overview definition into markdown after confidence block
+
+    Args:
+        markdown: Original markdown from AI
+        zone: Zone number (1, 3, 4, 5)
+        subzone: Subzone letter (A, B, C) for Zone 3, empty otherwise
+
+    Returns:
+        Markdown with zone overview injected
+    """
+    # Build zone key
+    zone_key = f"{zone}{subzone}" if zone == "3" and subzone else zone
+
+    # Get definition
+    definition = ZONE_DEFINITIONS.get(zone_key, "")
+    if not definition:
+        logger.warning(f"No zone definition found for zone {zone}{subzone}")
+        return markdown
+
+    # Find insertion point: after confidence block, before next section
+    # Look for patterns like "**SCORING BREAKDOWN**" or other section headers
+    pattern = r"(\n\n)(\*\*SCORING BREAKDOWN\*\*|\*\*.*Assessment.*\*\*|##\s+)"
+    match = re.search(pattern, markdown)
+
+    if match:
+        # Insert before the matched section
+        insert_pos = match.start()
+        modified = markdown[:insert_pos] + "\n\n" + definition.strip() + "\n" + markdown[insert_pos:]
+        logger.info(f"Zone overview injected for Zone {zone}{subzone}")
+        return modified
+    else:
+        # Fallback: append after first major section (after confidence)
+        # Look for the end of confidence block (after the bullet points)
+        confidence_pattern = r"(Confidence:.*?\n(?:[-•]\s+.*\n)+)"
+        match = re.search(confidence_pattern, markdown, re.DOTALL)
+        if match:
+            insert_pos = match.end()
+            modified = markdown[:insert_pos] + "\n" + definition.strip() + "\n\n" + markdown[insert_pos:]
+            logger.info(f"Zone overview injected for Zone {zone}{subzone} (fallback position)")
+            return modified
+
+    logger.warning("Could not find insertion point for zone overview")
+    return markdown
+
+
 def _validate_zone_assignment(assessment: Dict[str, Any], summary: Dict[str, Any], brand_name: str) -> None:
     """Validate zone assignment against assessment data and log warnings
 
@@ -366,7 +515,11 @@ Formatting:
                 # Log detailed results
                 zone = summary.get("zone", "unknown")
                 zone_name = summary.get("zone_name", "unknown")
+                subzone = summary.get("subzone", "")
                 confidence = summary.get("confidence", 0)
+
+                # Inject zone overview definition into markdown
+                markdown = _inject_zone_overview(markdown, zone, subzone)
 
                 logger.info(f"OpenAI response received in {response_time:.2f}s")
                 logger.info(f"Recommended zone: {zone} ({zone_name}) with {confidence}% confidence")
