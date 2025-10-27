@@ -1,4 +1,11 @@
+# Production dependencies
 fastapi
 uvicorn[standard]
 openai>=1.40.0
 pydantic
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-mock>=3.10.0
+pytest-cov>=4.0.0
+httpx>=0.24.0
