@@ -1,122 +1,119 @@
-
-import os, json, re
+import os
 from typing import Any, Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from openai import OpenAI
+from pydantic import RootModel
+from contextlib import asynccontextmanager
 
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SYSTEM_RULES_PATH = os.getenv("SYSTEM_RULES_PATH", "/app/rules/HEX-5112.md")
+from config import Config, ConfigError
+from services.openai_service import OpenAIService, OpenAIServiceError
+from utils.logging_config import setup_logging, get_logger
 
-client = OpenAI(api_key=OPENAI_API_KEY)
-app = FastAPI(title="Brand Zoning API")
+# Initialize configuration and logging
+try:
+    config = Config()
+    setup_logging(config.log_level)
+    logger = get_logger(__name__)
+except ConfigError as e:
+    print(f"Configuration error: {e}")
+    raise
 
-# --- CORS (tighten allow_origins in prod) ---
+# Initialize OpenAI service
+openai_service = OpenAIService(config)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info("Starting Brand Zoning API")
+    logger.info(f"OpenAI Model: {config.openai_model}")
+    logger.info(f"Rules file loaded: {config.rules_file_exists}")
+
+    if not config.rules_file_exists:
+        logger.warning(f"Rules file not found at {config.system_rules_path}")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down Brand Zoning API")
+
+
+app = FastAPI(
+    title="Brand Zoning API",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class Assessment(BaseModel):
-    __root__: Dict[str, Any]
 
-MACHINE_JSON_SCHEMA = {
-  "type":"object",
-  "additionalProperties": False,
-  "properties":{
-    "brand":{"type":"string"},
-    "zone":{"type":"string","enum":["1","3","4","5"]},
-    "zone_name":{"type":"string","enum":[
-      "Full Masterbrand Integration","Endorsed Brand",
-      "High-Stakes Independence","Legal/Accounting/Integration Hold"
-    ]},
-    "subzone":{"type":"string"},
-    "confidence":{"type":"integer","minimum":0,"maximum":100},
-    "drivers":{"type":"array","items":{"type":"string"}},
-    "conflicts":{"type":"array","items":{"type":"string"}},
-    "risks":{"type":"array","items":{"type":"string"}},
-    "next_steps":{"type":"array","items":{"type":"string"}}
-  },
-  "required":["brand","zone","zone_name","subzone","confidence","drivers","conflicts","risks","next_steps"]
-}
+class Assessment(RootModel[Dict[str, Any]]):
+    """Brand architecture assessment data"""
+    pass
 
-def load_rules_text() -> str:
-    try:
-        with open(SYSTEM_RULES_PATH, "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception:
-        return ""
 
-SYSTEM_PROMPT = f"""You are a strict brand-architecture adjudicator.
-Apply these rules verbatim. If the rules file is present, it overrides ambiguities.
+@app.get("/")
+def root():
+    """API information endpoint"""
+    return {
+        "name": "Brand Zoning API",
+        "version": "1.0.0",
+        "description": "AI-powered brand architecture zone recommendations",
+        "endpoints": {
+            "POST /zone": "Generate zone recommendation from assessment",
+            "GET /health": "Health check endpoint"
+        }
+    }
 
-=== RULES FILE (if provided) ===
-{load_rules_text()}
-=== END RULES FILE ===
-"""
 
-DEVELOPER_PROMPT = """You MUST output, in order:
-1) H1 line: "# Zone X — [Zone Name] (Recommended)"
-2) **CONCLUSION:** ...
-3) Confidence block with exact two lines + 1–3 bullets
-4) Zone-Specific Assessment
-5) Strategic Recommendations
-6) Risk Analysis & Mitigation
-7) Next Steps & Action Items
-8) Machine-Readable Summary as fenced ```json with exact keys
+@app.get("/health")
+def health():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "openai": "configured" if config.openai_api_key else "missing",
+        "rules_loaded": config.rules_file_exists,
+        "model": config.openai_model
+    }
 
-Precedence Rules:
-- If ANY Zone 5 trigger present → Zone 5.
-- Else if Zone 4 gating criteria met → Zone 4.
-- Else decide Zone 1 vs Zone 3 using tie-breakers.
-
-Confidence = [Evidence 0–40] + [Completeness 0–30] + [Conflict (inverse) 0–30] = N/100.
-If thin data, produce a Provisional score.
-
-Formatting:
-- Anchors: zone-recommendation, conclusion, confidence, zone-assessment, strategy, risks, next-steps, summary-json.
-- ≤120 words per section; bullets OK; no extra sections.
-- Cite evidence with (Q#) or (Not provided in assessment)."""
-
-def extract_summary(markdown: str) -> Dict[str, Any]:
-    m = re.search(r"```json\s*(\{.*?\})\s*```", markdown, re.S)
-    return json.loads(m.group(1)) if m else {}
 
 @app.post("/zone")
 def zone(assessment: Assessment):
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
+    """Generate zone recommendation report from assessment
 
-    user_payload = assessment.__root__
+    Args:
+        assessment: Brand architecture assessment JSON
 
-    user_msg = (
-        "ASSESSMENT JSON:\n" +
-        json.dumps(user_payload, ensure_ascii=False, indent=2) +
-        "\n\nFollow all formatting + precedence rules exactly."
-    )
+    Returns:
+        Dict with report_markdown and summary
 
-    resp = client.responses.create(
-        model=OPENAI_MODEL,
-        input=[
-            {"role":"system","content":SYSTEM_PROMPT},
-            {"role":"developer","content":DEVELOPER_PROMPT},
-            {"role":"user","content":user_msg},
-        ],
-        text={
-          "format":{
-            "type":"json_schema",
-            "schema":MACHINE_JSON_SCHEMA
-          },
-          "require_json": False
-        },
-        temperature=0.1
-    )
+    Raises:
+        HTTPException: On service errors
+    """
+    logger.info("Received zone recommendation request")
 
-    content = resp.output_text
-    summary = extract_summary(content)
-    return {"report_markdown": content, "summary": summary}
+    try:
+        result = openai_service.generate_zone_report(assessment.root)
+        logger.info("Successfully generated zone recommendation")
+        return result
+
+    except OpenAIServiceError as e:
+        logger.error(f"OpenAI service error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"OpenAI service unavailable: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
