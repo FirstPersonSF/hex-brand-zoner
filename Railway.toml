@@ -4,7 +4,10 @@ builder = "NIXPACKS"
 [deploy]
 startCommand = "uvicorn app:app --host 0.0.0.0 --port ${PORT}"
 restartPolicyType = "on_failure"
+healthcheckPath = "/health"
+healthcheckTimeout = 10
 
 [variables]
 OPENAI_MODEL = "gpt-4o"
-SYSTEM_RULES_PATH = "/app/rules/HEX-5112.md"
+SYSTEM_RULES_PATH = "/app/rules/HEX 5112 - Brand Architecture - Full Set of Questions & Logic Scoring v009.md"
+LOG_LEVEL = "INFO"
