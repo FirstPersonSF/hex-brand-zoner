@@ -33,6 +33,77 @@ def _extract_summary(markdown: str) -> Dict[str, Any]:
     return {}
 
 
+def _validate_zone_assignment(assessment: Dict[str, Any], summary: Dict[str, Any], brand_name: str) -> None:
+    """Validate zone assignment against assessment data and log warnings
+
+    Args:
+        assessment: Brand architecture assessment data
+        summary: Parsed summary from AI response
+        brand_name: Brand name for logging
+    """
+    zone = summary.get("zone", "")
+    subzone = summary.get("subzone", "")
+
+    # Check Zone 5 gating condition
+    zone5_data = assessment.get("zone5", {})
+    if zone5_data.get("active_restriction_preventing_hex"):
+        if zone != "5":
+            logger.error(f"❌ [{brand_name}] Z5 Q1 gating condition (legal restriction) present but assigned Zone {zone}")
+
+    # Check Zone 4 triggers
+    zone4_data = assessment.get("zone4", {})
+    z4_triggers = [
+        ("hex_branding_reduces_trust", "Q2: Hex branding reduces trust"),
+        ("hex_link_creates_risk", "Q3: Hex link creates risk"),
+        ("stakeholders_object_elimination", "Q8: Stakeholders object to elimination"),
+        ("rebrand_invalidates_contracts", "Q9: Contracts would be invalidated")
+    ]
+
+    z4_trigger_count = sum(1 for key, _ in z4_triggers if zone4_data.get(key))
+    if z4_trigger_count > 0 and zone != "4":
+        triggered = [desc for key, desc in z4_triggers if zone4_data.get(key)]
+        logger.warning(f"⚠️ [{brand_name}] {z4_trigger_count} Zone 4 trigger(s) present but assigned Zone {zone}: {', '.join(triggered)}")
+
+    # Check Zone 3A indicators vs assignment
+    if zone == "3":
+        zone3_data = assessment.get("zone3", {})
+        z3_confidence = zone3_data.get("z3_confidence_fallback", {})
+
+        z3a_indicators = {
+            "removal_causes_attrition": "Q8a: Removal causes attrition",
+            "removal_risk_in_key_markets": "Removal risk in key markets",
+            "transition_complexity_gt12mo": "Q8b: Complex transition >12mo"
+        }
+
+        z3a_score = sum(1 for key in z3a_indicators if zone3_data.get(key))
+
+        # Additional Z3A indicators from confidence section
+        if z3_confidence.get("generates_demand_via_own_equity"):
+            z3a_score += 1
+        if zone3_data.get("higher_awareness_than_hex"):
+            z3a_score += 1
+
+        # Zone 1 revenue indicator
+        zone1_data = assessment.get("zone1", {})
+        if zone1_data.get("pct_of_division_revenue") == "20-70":
+            z3a_score += 1
+
+        if subzone == "A" and z3a_score < 2:
+            logger.warning(f"⚠️ [{brand_name}] Zone 3A assigned but only {z3a_score} strong Z3A indicators found")
+        elif subzone == "B" and z3a_score >= 3:
+            logger.warning(f"⚠️ [{brand_name}] Zone 3B assigned but {z3a_score} Z3A indicators present (may warrant 3A)")
+        elif subzone == "C" and zone3_data.get("independent_marketing_budget"):
+            logger.warning(f"⚠️ [{brand_name}] Zone 3C assigned but brand has independent marketing budget (usually Z3A/3B)")
+
+    # Check Zone 1 indicators
+    if zone == "1":
+        zone1_data = assessment.get("zone1", {})
+        if zone1_data.get("pct_of_division_revenue") in ["20-70", "> 70"]:
+            logger.warning(f"⚠️ [{brand_name}] Zone 1 assigned but revenue contribution is {zone1_data.get('pct_of_division_revenue')} (usually Z3A or Z2B)")
+
+    logger.info(f"✅ [{brand_name}] Validation complete: Zone {zone}{subzone or ''}")
+
+
 class OpenAIService:
     """Service for interacting with OpenAI API"""
 
@@ -80,11 +151,43 @@ Apply these rules verbatim. If the rules file is present, it overrides ambiguiti
 1) H1 line: "# Zone X[Subzone] — [Zone Name] (Recommended)" (e.g., "# Zone 3A — Endorsed Brand Architecture (Recommended)")
 2) **CONCLUSION:** ...
 3) Confidence block with exact two lines + 1–3 bullets
-4) Zone-Specific Assessment
-5) Strategic Recommendations
-6) Risk Analysis & Mitigation
-7) Next Steps & Action Items
-8) Machine-Readable Summary as fenced ```json with exact keys
+4) **SCORING BREAKDOWN:** Show all zone scores with question tallies (see format below)
+5) Zone-Specific Assessment
+6) Strategic Recommendations
+7) Risk Analysis & Mitigation
+8) Next Steps & Action Items
+9) Machine-Readable Summary as fenced ```json with exact keys
+
+Scoring Breakdown Format:
+**SCORING BREAKDOWN**
+
+Main Zones:
+- Zone 1: X points (list top 3-5 contributing questions)
+- Zone 3: X points ← WINNER (list top 3-5 contributing questions)
+- Zone 4: X points (list top 3-5 contributing questions)
+- Zone 5: X points (list top 3-5 contributing questions)
+
+[If Zone 3 wins, also show:]
+Zone 3 Sub-zones:
+- 3A (Lockup): X points ← WINNER (list top 3 indicators)
+- 3B (Sub-brand): X points (list top 3 indicators)
+- 3C (Integrated): X points (list top 3 indicators)
+
+Winner Margin: X points ahead of second place
+
+Example:
+Main Zones:
+- Zone 1: 8 points (Q1 revenue <20%, Q5 no confusion)
+- Zone 3: 22 points ← WINNER (Q8a removal risk, Q8b complex transition, revenue 20-70%)
+- Zone 4: 6 points (Q1 awareness 50-70%)
+- Zone 5: 3 points (Q2 no integration plan)
+
+Zone 3 Sub-zones:
+- 3A: 16 points ← WINNER (removal risk, transition >12mo, revenue contribution)
+- 3B: 8 points (some equity signals)
+- 3C: 2 points (minimal embedding)
+
+Winner Margin: 14 points ahead of Zone 1
 
 Precedence Rules (CRITICAL - Follow Exactly):
 
@@ -131,6 +234,40 @@ Report as "Zone 3A", "Zone 3B", or "Zone 3C" in both H1 and JSON "subzone" field
 
 IMPORTANT: Do NOT assign Zone 5 unless Z5 Q1 gates it OR Z5 has the highest cumulative score.
 Missing integration plans alone does NOT force Zone 5 - it only adds +3 points to Z5 scoring.
+
+Quick Scoring Reference (Key Questions):
+
+ZONE 4 (High-Stakes Independence):
+- Q2 (Hex branding reduces trust): Yes = +2 Z4
+- Q3 (Hex link creates risk): Yes = +3 Z4
+- Q7 (Values incompatible): Yes = +2 Z4
+- Q8 (Stakeholders object to elimination): Yes = Gate Z4
+- Q9 (Contracts invalidated): Yes = Gate Z4
+- Q10 (Top 2, endorsement weakens): Yes = +2 Z4 | No = +2 Z3A
+
+ZONE 5 (Legal/Transitional):
+- Q1 (Legal restriction): Yes = GATE Z5 (forces Zone 5)
+- Q2 (No integration plan): No = +3 Z5 | Yes = +1 Z1, +1 Z3
+- Q3 (Planned divestiture): Yes = +3 Z5 | No = +1 Z1, +1 Z3
+- Q4 (No integration forecast): No = +3 Z5 | Yes = +2 Z1, +2 Z3
+- Q5 (Pilot/POC stage): Yes = +2 Z5
+- Q6 (Time-bound separation): Yes = +3 Z5 | No = +1 Z1, +1 Z3
+
+ZONE 1 (Masterbrand Integration):
+- Q1 (Revenue): <20% = +3 Z1 | 20-70% = +2 Z3A
+- Q2 (Embedding): Partially = moderate | Fully embedded = +Z1 signals
+- Q5 (Customer confusion): Yes = -1 Z1
+- Q14 (Removing strengthens clarity): Yes = +2 Z1
+
+ZONE 3 (Endorsed):
+- Q1 (≥20% awareness): Yes = +2 Z3
+- Q2 (Higher awareness than Hex): Yes = +2 Z3
+- Q3 (Removal causes attrition): Yes = +2 Z3A/Z3B
+- Q5 (Outperforms Hex metrics): Yes = +2 Z3A
+- Q8a (Removal creates risk): Yes = +2 Z3A/Z3B | No = +1 Z1
+- Q8b (Transition >12mo): Yes = +1 Z3A | No = +2 Z3B
+- Q10 (Independent marketing): Yes = +2 Z3A | No = +2 Z3C
+- Confidence Q10 (Generates demand independently): Yes = +3 Z3A
 
 Confidence = [Evidence 0–40] + [Completeness 0–30] + [Conflict (inverse) 0–30] = N/100.
 If thin data, produce a Provisional score.
@@ -200,6 +337,9 @@ Formatting:
                 logger.info(f"OpenAI response received in {response_time:.2f}s")
                 logger.info(f"Recommended zone: {zone} ({zone_name}) with {confidence}% confidence")
                 logger.info("Successfully generated zone report")
+
+                # Validate zone assignment against assessment data
+                _validate_zone_assignment(assessment, summary, brand_name)
 
                 return {
                     "report_markdown": markdown,
