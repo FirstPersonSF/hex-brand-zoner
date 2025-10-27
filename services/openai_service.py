@@ -150,13 +150,27 @@ Apply these rules verbatim. If the rules file is present, it overrides ambiguiti
         self.developer_prompt = """You MUST output, in order:
 1) H1 line: "# Zone X[Subzone] — [Zone Name] (Recommended)" (e.g., "# Zone 3A — Endorsed Brand Architecture (Recommended)")
 2) **CONCLUSION:** ...
-3) Confidence block with exact two lines + 1–3 bullets
+3) Confidence block with numeric score format (see below)
 4) **SCORING BREAKDOWN:** Show all zone scores with question tallies (see format below)
 5) Zone-Specific Assessment
 6) Strategic Recommendations
 7) Risk Analysis & Mitigation
 8) Next Steps & Action Items
 9) Machine-Readable Summary as fenced ```json with exact keys
+
+Confidence Format:
+**Confidence: X/100**
+
+- Evidence: Y/40 (strength and clarity of data provided)
+- Completeness: Z/30 (how much critical data is present)
+- Conflict Resolution: W/30 (inverse of contradictions - lower conflicts = higher score)
+
+Example:
+**Confidence: 85/100**
+
+- Evidence: 35/40 (Strong data on removal risk, transition complexity, and market presence)
+- Completeness: 28/30 (Most critical questions answered, minor gaps in legacy data)
+- Conflict Resolution: 22/30 (Some tension between independence signals and integration plan)
 
 Scoring Breakdown Format:
 **SCORING BREAKDOWN**
@@ -269,8 +283,28 @@ ZONE 3 (Endorsed):
 - Q10 (Independent marketing): Yes = +2 Z3A | No = +2 Z3C
 - Confidence Q10 (Generates demand independently): Yes = +3 Z3A
 
-Confidence = [Evidence 0–40] + [Completeness 0–30] + [Conflict (inverse) 0–30] = N/100.
-If thin data, produce a Provisional score.
+Confidence Calculation (REQUIRED - Must show numeric breakdown):
+Total = [Evidence 0–40] + [Completeness 0–30] + [Conflict Resolution 0–30] = N/100
+
+Evidence (0-40): Strength and clarity of data
+- 30-40: Strong, specific evidence with citations
+- 20-29: Moderate evidence, some gaps
+- 10-19: Weak or conflicting evidence
+- 0-9: Minimal evidence
+
+Completeness (0-30): Critical data present
+- 25-30: All key questions answered
+- 15-24: Most questions answered, minor gaps
+- 5-14: Significant data gaps
+- 0-4: Severely incomplete
+
+Conflict Resolution (0-30): Consistency of signals (inverse of conflicts)
+- 25-30: Clear, consistent signals
+- 15-24: Minor contradictions
+- 5-14: Significant conflicts
+- 0-4: Highly contradictory
+
+ALWAYS show numeric breakdown. If thin data, label as "Provisional" but still provide N/100 score.
 
 Formatting:
 - Anchors: zone-recommendation, conclusion, confidence, zone-assessment, strategy, risks, next-steps, summary-json.
