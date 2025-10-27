@@ -1,6 +1,9 @@
 import os
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigError(Exception):
@@ -54,7 +57,16 @@ class Config:
             with open(self.system_rules_path, "r", encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
+            # Expected case when rules file is not present
+            logger.debug(
+                f"Rules file not found at {self.system_rules_path}, "
+                "using empty rules"
+            )
             return ""
         except Exception as e:
-            # Log but don't fail - rules file is optional
+            # Unexpected errors (permissions, encoding, etc.)
+            logger.warning(
+                f"Failed to load rules file from {self.system_rules_path}: {e}",
+                exc_info=True
+            )
             return ""

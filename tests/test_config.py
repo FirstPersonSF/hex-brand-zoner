@@ -59,3 +59,70 @@ def test_config_loads_rules_text(monkeypatch, tmp_path):
 
     assert "Test Rules" in rules
     assert "Rule 1" in rules
+
+
+def test_config_parses_cors_origins_comma_separated(monkeypatch):
+    """Config should parse comma-separated CORS origins"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:3000,https://app.example.com,https://staging.example.com")
+
+    config = Config()
+
+    assert config.cors_origins == [
+        "http://localhost:3000",
+        "https://app.example.com",
+        "https://staging.example.com"
+    ]
+
+
+def test_config_parses_cors_origins_with_whitespace(monkeypatch):
+    """Config should handle whitespace in comma-separated CORS origins"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
+    monkeypatch.setenv("CORS_ORIGINS", " http://localhost:3000 , https://app.example.com , ")
+
+    config = Config()
+
+    assert config.cors_origins == [
+        "http://localhost:3000",
+        "https://app.example.com"
+    ]
+
+
+def test_config_parses_cors_origins_default_wildcard(monkeypatch):
+    """Config should default to wildcard when CORS_ORIGINS not set"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+
+    config = Config()
+
+    assert config.cors_origins == ["*"]
+
+
+def test_config_parses_cors_origins_explicit_wildcard(monkeypatch):
+    """Config should handle explicit wildcard CORS_ORIGINS"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+
+    config = Config()
+
+    assert config.cors_origins == ["*"]
+
+
+def test_config_loads_log_level_from_env(monkeypatch):
+    """Config should load LOG_LEVEL from environment"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+    config = Config()
+
+    assert config.log_level == "DEBUG"
+
+
+def test_config_uses_default_log_level(monkeypatch):
+    """Config should default to INFO when LOG_LEVEL not set"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-123")
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+
+    config = Config()
+
+    assert config.log_level == "INFO"
