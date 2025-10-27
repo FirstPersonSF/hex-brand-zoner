@@ -86,10 +86,25 @@ Apply these rules verbatim. If the rules file is present, it overrides ambiguiti
 7) Next Steps & Action Items
 8) Machine-Readable Summary as fenced ```json with exact keys
 
-Precedence Rules:
-- If ANY Zone 5 trigger present → Zone 5.
-- Else if Zone 4 gating criteria met → Zone 4.
-- Else decide Zone 1 vs Zone 3 using tie-breakers.
+Precedence Rules (CRITICAL - Follow Exactly):
+
+STEP 1 - Check GATING conditions (immediate assignment):
+- Z5 Q1: Legal/compliance restriction = Yes → FORCE Zone 5 (stop evaluation)
+- Z4: High-risk independence criteria met → FORCE Zone 4 (per rules file)
+
+STEP 2 - If no gates triggered, use SCORING (accumulative):
+- Each question contributes points to one or more zones (Z1, Z3, Z4, Z5)
+- Questions can add points to MULTIPLE zones simultaneously
+- Examples:
+  * Z5 Q2 (No integration plan): No = +3 Z5 | Yes = +1 Z1 AND +1 Z3
+  * Z5 Q3 (Planned sale): Yes = +3 Z5 | No = +1 Z1 AND +1 Z3
+  * Z5 Q4 (Integration forecast): No = +3 Z5 | Yes = +2 Z1 AND +2 Z3
+- Tally ALL points across ALL questions for each zone
+- Highest total zone score wins
+- Use sub-zone scores (A/B/C) for final placement within winning zone
+
+IMPORTANT: Do NOT assign Zone 5 unless Z5 Q1 gates it OR Z5 has the highest cumulative score.
+Missing integration plans alone does NOT force Zone 5 - it only adds +3 points to Z5 scoring.
 
 Confidence = [Evidence 0–40] + [Completeness 0–30] + [Conflict (inverse) 0–30] = N/100.
 If thin data, produce a Provisional score.
