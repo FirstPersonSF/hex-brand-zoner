@@ -77,7 +77,7 @@ Apply these rules verbatim. If the rules file is present, it overrides ambiguiti
 """
 
         self.developer_prompt = """You MUST output, in order:
-1) H1 line: "# Zone X — [Zone Name] (Recommended)"
+1) H1 line: "# Zone X[Subzone] — [Zone Name] (Recommended)" (e.g., "# Zone 3A — Endorsed Brand Architecture (Recommended)")
 2) **CONCLUSION:** ...
 3) Confidence block with exact two lines + 1–3 bullets
 4) Zone-Specific Assessment
@@ -101,7 +101,33 @@ STEP 2 - If no gates triggered, use SCORING (accumulative):
   * Z5 Q4 (Integration forecast): No = +3 Z5 | Yes = +2 Z1 AND +2 Z3
 - Tally ALL points across ALL questions for each zone
 - Highest total zone score wins
-- Use sub-zone scores (A/B/C) for final placement within winning zone
+
+STEP 3 - Determine SUB-ZONE (for Zone 3 only):
+If Zone 3 wins, determine A/B/C based on questions that specify sub-zones:
+
+Zone 3A (Lockup) indicators:
+- High removal risk (Q8a: removal causes attrition/confusion)
+- Complex transition >12mo (Q8b: multi-region, partner/OEM complexity)
+- Brand outperforms Hexagon in metrics (Q5: +2 Z3A)
+- Top 2 ranked but endorsable (Z4 Q10: No = +2 Z3A)
+- Revenue 20-70% of division (Z1 Q1: +2 Z3A)
+- Cannot easily integrate (Z3 Confidence Q7: No)
+- Strong independent equity (Q14: ≥40% awareness 3+ years)
+
+Zone 3B (Sub-brand) indicators:
+- Part of Hexagon platform/ecosystem (Q2: +2 Z3B)
+- Plan to retain name only (Z1 Q2B: +2 Z3B)
+- Easier transition <12mo (Q8b: No = +2 Z3B)
+- Some brand equity but not dominant
+- Product/experience loyalty (Q36: NPS-based)
+
+Zone 3C (Integrated Product) indicators:
+- Embedded in technical stacks/user flows
+- No independent marketing budget (Q10: No = +2 Z3C)
+- Primarily product/service name not brand identity
+
+Tally sub-zone specific points. Highest sub-zone score determines final placement.
+Report as "Zone 3A", "Zone 3B", or "Zone 3C" in both H1 and JSON "subzone" field.
 
 IMPORTANT: Do NOT assign Zone 5 unless Z5 Q1 gates it OR Z5 has the highest cumulative score.
 Missing integration plans alone does NOT force Zone 5 - it only adds +3 points to Z5 scoring.
