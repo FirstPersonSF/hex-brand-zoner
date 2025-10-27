@@ -111,11 +111,18 @@ Formatting:
         Raises:
             OpenAIServiceError: If API call fails after retries
         """
+        # Extract brand name for logging
+        brand_name = assessment.get("brand", "Unknown")
+        logger.info(f"Zone request for brand: {brand_name}")
+
         user_msg = (
             "ASSESSMENT JSON:\n" +
             json.dumps(assessment, ensure_ascii=False, indent=2) +
             "\n\nFollow all formatting + precedence rules exactly."
         )
+
+        # Track response time
+        start_time = time.time()
 
         # Retry logic
         for attempt in range(self.config.openai_max_retries):
@@ -135,7 +142,18 @@ Formatting:
                 markdown = response.choices[0].message.content
                 summary = _extract_summary(markdown)
 
+                # Calculate response time
+                response_time = time.time() - start_time
+
+                # Log detailed results
+                zone = summary.get("zone", "unknown")
+                zone_name = summary.get("zone_name", "unknown")
+                confidence = summary.get("confidence", 0)
+
+                logger.info(f"OpenAI response received in {response_time:.2f}s")
+                logger.info(f"Recommended zone: {zone} ({zone_name}) with {confidence}% confidence")
                 logger.info("Successfully generated zone report")
+
                 return {
                     "report_markdown": markdown,
                     "summary": summary

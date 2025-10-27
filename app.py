@@ -98,21 +98,28 @@ def zone(assessment: Assessment):
     Raises:
         HTTPException: On service errors
     """
-    logger.info("Received zone recommendation request")
+    # Log request with brand info if available
+    brand_name = assessment.root.get("brand", "Unknown")
+    logger.info(f"📥 Received zone recommendation request for brand: {brand_name}")
 
     try:
         result = openai_service.generate_zone_report(assessment.root)
-        logger.info("Successfully generated zone recommendation")
+
+        # Log success with zone info
+        zone = result.get("summary", {}).get("zone", "unknown")
+        confidence = result.get("summary", {}).get("confidence", 0)
+        logger.info(f"✅ Successfully generated zone recommendation: Zone {zone} ({confidence}% confidence)")
+
         return result
 
     except OpenAIServiceError as e:
-        logger.error(f"OpenAI service error: {e}")
+        logger.error(f"❌ OpenAI service error for brand {brand_name}: {e}")
         raise HTTPException(
             status_code=503,
             detail=f"OpenAI service unavailable: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        logger.error(f"❌ Unexpected error for brand {brand_name}: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="Internal server error"
