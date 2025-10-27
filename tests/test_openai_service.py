@@ -26,8 +26,8 @@ def test_generate_zone_report_success(mock_config):
     """generate_zone_report should return markdown and summary on success"""
     service = OpenAIService(mock_config)
 
-    mock_response = Mock()
-    mock_response.output_text = """# Zone 1 — Full Masterbrand Integration (Recommended)
+    mock_choice = Mock()
+    mock_choice.message.content = """# Zone 1 — Full Masterbrand Integration (Recommended)
 
 **CONCLUSION:** Brand should integrate.
 
@@ -45,8 +45,10 @@ def test_generate_zone_report_success(mock_config):
 }
 ```
 """
+    mock_response = Mock()
+    mock_response.choices = [mock_choice]
 
-    with patch.object(service.client.responses, 'create', return_value=mock_response):
+    with patch.object(service.client.chat.completions, 'create', return_value=mock_response):
         result = service.generate_zone_report({"brand": "Test"})
 
     assert "Zone 1" in result["report_markdown"]
@@ -59,10 +61,12 @@ def test_generate_zone_report_retries_on_timeout(mock_config):
     service = OpenAIService(mock_config)
 
     # First two calls timeout, third succeeds
+    mock_choice = Mock()
+    mock_choice.message.content = "# Zone 1\n```json\n{\"brand\":\"Test\",\"zone\":\"1\",\"zone_name\":\"Full Masterbrand Integration\",\"subzone\":\"A\",\"confidence\":80,\"drivers\":[],\"conflicts\":[],\"risks\":[],\"next_steps\":[]}\n```"
     mock_response = Mock()
-    mock_response.output_text = "# Zone 1\n```json\n{\"brand\":\"Test\",\"zone\":\"1\",\"zone_name\":\"Full Masterbrand Integration\",\"subzone\":\"A\",\"confidence\":80,\"drivers\":[],\"conflicts\":[],\"risks\":[],\"next_steps\":[]}\n```"
+    mock_response.choices = [mock_choice]
 
-    with patch.object(service.client.responses, 'create') as mock_create:
+    with patch.object(service.client.chat.completions, 'create') as mock_create:
         from openai import APITimeoutError
         mock_create.side_effect = [
             APITimeoutError("Timeout"),
@@ -80,7 +84,7 @@ def test_generate_zone_report_fails_after_max_retries(mock_config):
     """generate_zone_report should raise error after max retries"""
     service = OpenAIService(mock_config)
 
-    with patch.object(service.client.responses, 'create') as mock_create:
+    with patch.object(service.client.chat.completions, 'create') as mock_create:
         from openai import APITimeoutError
         mock_create.side_effect = APITimeoutError("Timeout")
 

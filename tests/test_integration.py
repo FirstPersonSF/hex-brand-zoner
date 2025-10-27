@@ -29,8 +29,8 @@ def test_zone_endpoint_with_sample_assessment(mock_env, sample_assessment):
     client = TestClient(app)
 
     # Mock OpenAI response with realistic data
-    mock_response = Mock()
-    mock_response.output_text = """# Zone 1 — Full Masterbrand Integration (Recommended)
+    mock_choice = Mock()
+    mock_choice.message.content = """# Zone 1 — Full Masterbrand Integration (Recommended)
 
 **CONCLUSION:** Based on the assessment data, NovAtel should pursue full integration into the Hexagon masterbrand.
 
@@ -70,8 +70,10 @@ The brand shows strong indicators for masterbrand integration with limited marke
 }
 ```
 """
+    mock_response = Mock()
+    mock_response.choices = [mock_choice]
 
-    with patch("app.openai_service.client.responses.create", return_value=mock_response):
+    with patch("app.openai_service.client.chat.completions.create", return_value=mock_response):
         response = client.post("/zone", json=sample_assessment)
 
     assert response.status_code == 200

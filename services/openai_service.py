@@ -122,23 +122,17 @@ Formatting:
             try:
                 logger.info(f"Calling OpenAI API (attempt {attempt + 1}/{self.config.openai_max_retries})")
 
-                response = self.client.responses.create(
+                response = self.client.chat.completions.create(
                     model=self.config.openai_model,
-                    input=[
+                    messages=[
                         {"role": "system", "content": self.system_prompt},
                         {"role": "developer", "content": self.developer_prompt},
                         {"role": "user", "content": user_msg},
                     ],
-                    text={
-                        "format": {
-                            "type": "json_schema",
-                            "schema": self.MACHINE_JSON_SCHEMA
-                        }
-                    },
                     temperature=self.config.temperature
                 )
 
-                markdown = response.output_text
+                markdown = response.choices[0].message.content
                 summary = _extract_summary(markdown)
 
                 logger.info("Successfully generated zone report")
