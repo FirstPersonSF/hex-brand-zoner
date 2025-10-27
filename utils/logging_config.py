@@ -1,6 +1,5 @@
 import logging
 import sys
-from typing import Optional
 
 
 def setup_logging(level: str = "INFO") -> None:
@@ -43,12 +42,4 @@ def get_logger(name: str) -> logging.Logger:
         Configured logger instance
     """
     logger = logging.getLogger(name)
-    # Set logger level explicitly to match root logger if not set
-    if logger.level == 0:
-        logger.setLevel(logging.getLogger().level)
-    # Add root logger handlers to this logger for test visibility
-    if not logger.handlers:
-        root = logging.getLogger()
-        for handler in root.handlers:
-            logger.addHandler(handler)
     return logger

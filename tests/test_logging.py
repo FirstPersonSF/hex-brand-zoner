@@ -1,19 +1,20 @@
 import logging
-import json
 from utils.logging_config import setup_logging, get_logger
 
 
-def test_setup_logging_configures_json_format():
-    """setup_logging should configure JSON formatted logging"""
+def test_setup_logging_configures_text_format():
+    """setup_logging should configure text formatted logging"""
     setup_logging("DEBUG")
     logger = get_logger("test")
 
-    assert logger.level == logging.DEBUG
-    assert len(logger.handlers) > 0
+    # Check that root logger is configured with DEBUG level
+    root_logger = logging.getLogger()
+    assert root_logger.level == logging.DEBUG
+    assert len(root_logger.handlers) > 0
 
 
 def test_logger_includes_request_id(caplog):
-    """Logger should support request_id in extra"""
+    """Logger should accept request_id in extra without errors"""
     setup_logging("INFO")
     logger = get_logger("test")
 
