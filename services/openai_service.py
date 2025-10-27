@@ -129,6 +129,12 @@ Formatting:
             try:
                 logger.info(f"Calling OpenAI API (attempt {attempt + 1}/{self.config.openai_max_retries})")
 
+                # Debug logging - show what's being sent (only in DEBUG mode)
+                logger.debug(f"System prompt length: {len(self.system_prompt)} chars")
+                logger.debug(f"Developer prompt length: {len(self.developer_prompt)} chars")
+                logger.debug(f"Assessment JSON length: {len(user_msg)} chars")
+                logger.debug(f"Model: {self.config.openai_model}, Temperature: {self.config.temperature}")
+
                 response = self.client.chat.completions.create(
                     model=self.config.openai_model,
                     messages=[

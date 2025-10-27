@@ -85,6 +85,28 @@ def health():
     }
 
 
+@app.get("/debug/prompts")
+def debug_prompts():
+    """Debug endpoint to see the prompts being sent to OpenAI
+
+    WARNING: This exposes your prompt engineering.
+    Remove or protect this endpoint in production.
+    """
+    rules_text = config.load_rules_text()
+
+    return {
+        "system_prompt": openai_service.system_prompt,
+        "system_prompt_length": len(openai_service.system_prompt),
+        "developer_prompt": openai_service.developer_prompt,
+        "developer_prompt_length": len(openai_service.developer_prompt),
+        "rules_file_loaded": config.rules_file_exists,
+        "rules_file_length": len(rules_text),
+        "rules_preview": rules_text[:500] + "..." if len(rules_text) > 500 else rules_text,
+        "model": config.openai_model,
+        "temperature": config.temperature
+    }
+
+
 @app.post("/zone")
 def zone(assessment: Assessment):
     """Generate zone recommendation report from assessment
