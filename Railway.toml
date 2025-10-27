@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "uvicorn app:app --host 0.0.0.0 --port ${PORT}"
+restartPolicyType = "on_failure"
+
+[variables]
+OPENAI_MODEL = "gpt-4o"
+SYSTEM_RULES_PATH = "/app/rules/HEX-5112.md"
