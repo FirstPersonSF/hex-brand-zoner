@@ -7,6 +7,7 @@ from unittest.mock import patch, Mock
 def mock_env(monkeypatch, tmp_path):
     """Set up test environment"""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setenv("API_KEY", "test-api-key-123")
     rules_file = tmp_path / "rules.md"
     rules_file.write_text("# Test Rules")
     monkeypatch.setenv("SYSTEM_RULES_PATH", str(rules_file))
@@ -50,7 +51,11 @@ def test_zone_endpoint_requires_json_body(mock_env):
     }
 
     with patch("app.openai_service.generate_zone_report", return_value=mock_result):
-        response = client.post("/zone", json={})
+        response = client.post(
+            "/zone",
+            json={},
+            headers={"X-API-Key": "test-api-key-123"}
+        )
 
     # Should accept empty dict (Assessment allows any keys)
     assert response.status_code == 200
@@ -67,7 +72,11 @@ def test_zone_endpoint_returns_report_and_summary(mock_env):
     }
 
     with patch("app.openai_service.generate_zone_report", return_value=mock_result):
-        response = client.post("/zone", json={"brand": "Test Brand"})
+        response = client.post(
+            "/zone",
+            json={"brand": "Test Brand"},
+            headers={"X-API-Key": "test-api-key-123"}
+        )
 
     assert response.status_code == 200
     data = response.json()
@@ -83,7 +92,31 @@ def test_zone_endpoint_handles_openai_errors(mock_env):
     client = TestClient(app)
 
     with patch("app.openai_service.generate_zone_report", side_effect=OpenAIServiceError("API failed")):
-        response = client.post("/zone", json={"brand": "Test"})
+        response = client.post(
+            "/zone",
+            json={"brand": "Test"},
+            headers={"X-API-Key": "test-api-key-123"}
+        )
 
     assert response.status_code == 503
     assert "OpenAI service unavailable" in response.json()["detail"]
+
+
+def test_zone_endpoint_requires_api_key(mock_env):
+    """POST /zone should return 401 without valid API key"""
+    from app import app
+    client = TestClient(app)
+
+    # No API key
+    response = client.post("/zone", json={"brand": "Test"})
+    assert response.status_code == 401
+    assert "Missing API key" in response.json()["detail"]
+
+    # Invalid API key
+    response = client.post(
+        "/zone",
+        json={"brand": "Test"},
+        headers={"X-API-Key": "wrong-key"}
+    )
+    assert response.status_code == 401
+    assert "Invalid API key" in response.json()["detail"]

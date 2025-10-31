@@ -1,9 +1,12 @@
 import os
 from typing import Any, Dict
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import RootModel
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from config import Config, ConfigError
 from services.openai_service import OpenAIService, OpenAIServiceError
@@ -20,6 +23,47 @@ except ConfigError as e:
 
 # Initialize OpenAI service
 openai_service = OpenAIService(config)
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
+# API Key verification dependency
+def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
+    """Verify API key from request header
+
+    Args:
+        x_api_key: API key from X-API-Key header
+
+    Returns:
+        The API key if valid
+
+    Raises:
+        HTTPException: 401 if API key is invalid or missing
+    """
+    expected_key = os.getenv("API_KEY")
+
+    if not expected_key:
+        logger.error("API_KEY environment variable not configured")
+        raise HTTPException(
+            status_code=500,
+            detail="Server configuration error"
+        )
+
+    if not x_api_key:
+        logger.warning("API request without API key")
+        raise HTTPException(
+            status_code=401,
+            detail="Missing API key. Include X-API-Key header."
+        )
+
+    if x_api_key != expected_key:
+        logger.warning(f"Invalid API key attempt: {x_api_key[:10]}...")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key"
+        )
+
+    return x_api_key
 
 
 @asynccontextmanager
@@ -44,6 +88,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Add rate limiter state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(
@@ -86,11 +134,12 @@ def health():
 
 
 @app.get("/debug/prompts")
-def debug_prompts():
+@limiter.limit("10/hour")
+def debug_prompts(request: Request, api_key: str = Depends(verify_api_key)):
     """Debug endpoint to see the prompts being sent to OpenAI
 
     WARNING: This exposes your prompt engineering.
-    Remove or protect this endpoint in production.
+    Requires API key authentication.
     """
     rules_text = config.load_rules_text()
 
@@ -108,17 +157,23 @@ def debug_prompts():
 
 
 @app.post("/zone")
-def zone(assessment: Assessment):
+@limiter.limit("50/hour")
+def zone(request: Request, assessment: Assessment, api_key: str = Depends(verify_api_key)):
     """Generate zone recommendation report from assessment
 
+    Requires API key authentication via X-API-Key header.
+    Rate limited to 50 requests per hour per IP address.
+
     Args:
+        request: FastAPI request object (for rate limiting)
         assessment: Brand architecture assessment JSON
+        api_key: Verified API key from header
 
     Returns:
         Dict with report_markdown and summary
 
     Raises:
-        HTTPException: On service errors
+        HTTPException: 401 if invalid API key, 429 if rate limited, 503 on OpenAI errors
     """
     # Log request with brand info if available
     brand_name = assessment.root.get("brand", "Unknown")

@@ -8,6 +8,7 @@ import json
 def mock_env(monkeypatch):
     """Set up test environment with real rules file"""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setenv("API_KEY", "test-api-key-123")
     # Use actual rules file from project
     rules_path = Path(__file__).parent.parent / "rules" / "HEX 5112 - Brand Architecture - Full Set of Questions & Logic Scoring v009.md"
     if rules_path.exists():
@@ -74,7 +75,11 @@ The brand shows strong indicators for masterbrand integration with limited marke
     mock_response.choices = [mock_choice]
 
     with patch("app.openai_service.client.chat.completions.create", return_value=mock_response):
-        response = client.post("/zone", json=sample_assessment)
+        response = client.post(
+            "/zone",
+            json=sample_assessment,
+            headers={"X-API-Key": "test-api-key-123"}
+        )
 
     assert response.status_code == 200
     data = response.json()
